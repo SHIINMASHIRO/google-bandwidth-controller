@@ -43,12 +43,29 @@ A Go-based bandwidth traffic controller system designed to manage 15 VPS servers
 
 ## Requirements
 
-- **Go**: 1.21 or higher
+- **Go**: 1.21 or higher (for building from source)
 - **wget**: Installed on all agent machines
 - **Network**: All agents must be able to connect to controller
 - **Bandwidth**: VPS servers with sufficient bandwidth to Google
 
-## Quick Start
+## 🚀 Quick Start (One-Click Install)
+
+### Install Controller
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SHIINMASHIRO/google-bandwidth-controller/main/scripts/install-controller.sh | sudo bash
+```
+
+### Install Agent (on each VPS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SHIINMASHIRO/google-bandwidth-controller/main/scripts/install-agent.sh | \
+  sudo bash -s -- agent-001 "VPS-Tokyo-1" controller.example.com YOUR_AUTH_TOKEN
+```
+
+**📖 Complete one-click installation guide: [ONE_CLICK_INSTALL.md](ONE_CLICK_INSTALL.md)**
+
+## Manual Build & Deploy
 
 ### 1. Build Binaries
 
