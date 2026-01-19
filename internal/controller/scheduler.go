@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"

@@ -4,7 +4,19 @@
       "Bash(go get:*)",
       "Bash(chmod:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(tree:*)",
+      "Bash(git config:*)",
+      "Bash(ssh:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(open \"https://github.com/SHIINMASHIRO/google-bandwidth-controller/actions\")",
+      "Bash(git tag:*)",
+      "Bash(open \"https://github.com/SHIINMASHIRO/google-bandwidth-controller/releases/new?tag=v1.0.0\")",
+      "Bash(curl:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(go build:*)"
     ]
   }
 }
