@@ -1,0 +1,175 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║          Google Bandwidth Controller - 快速开始指南                  ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+项目位置: /Users/Mashiro/Projects/AVEN/Google ISP
+
+═══════════════════════════════════════════════════════════════════════
+
+📤 上传到 GitHub:
+
+1. 在 GitHub 创建新仓库:
+   https://github.com/new
+   仓库名: google-bandwidth-controller
+
+2. 在本地推送代码:
+   cd "/Users/Mashiro/Projects/AVEN/Google ISP"
+   git remote add origin https://github.com/YOUR_USERNAME/google-bandwidth-controller.git
+   git push -u origin main
+
+3. 等待 GitHub Actions 自动构建
+   访问: https://github.com/YOUR_USERNAME/google-bandwidth-controller/actions
+
+═══════════════════════════════════════════════════════════════════════
+
+📥 下载构建好的二进制:
+
+方法1 - 从 Actions Artifacts:
+   1. 访问 Actions 页面
+   2. 点击最新的成功构建
+   3. 下载 bandwidth-controller-linux-amd64.tar.gz
+
+方法2 - 创建 Release:
+   git tag -a v1.0.0 -m "First release"
+   git push origin v1.0.0
+
+   然后在 GitHub 网页创建 Release,会自动上传构建文件
+
+方法3 - 直接下载 (Release 创建后):
+   wget https://github.com/YOUR_USERNAME/google-bandwidth-controller/releases/download/v1.0.0/bandwidth-controller-linux-amd64.tar.gz
+
+═══════════════════════════════════════════════════════════════════════
+
+🚀 部署 Controller (主控服务器):
+
+1. 下载并解压:
+   tar xzf bandwidth-controller-linux-amd64.tar.gz
+   cd bandwidth-controller-linux-amd64
+
+2. 部署:
+   chmod +x scripts/deploy-controller.sh controller-linux-amd64
+   mv controller-linux-amd64 controller
+   sudo ./scripts/deploy-controller.sh
+
+3. 配置 (重要!):
+   sudo nano /etc/bandwidth-controller/controller.yaml
+
+   必改项:
+   - server.auth_token (改成强密码)
+   - agents[] (配置15台VPS的host)
+   - download_urls[] (添加Google服务URL)
+
+4. 启动:
+   sudo systemctl enable bandwidth-controller
+   sudo systemctl start bandwidth-controller
+   sudo journalctl -u bandwidth-controller -f
+
+═══════════════════════════════════════════════════════════════════════
+
+🤖 部署 Agent (15台 VPS,每台都要执行):
+
+1. 上传到 VPS:
+   scp agent-linux-amd64 scripts/deploy-agent.sh root@vps1.example.com:~/
+
+2. SSH 登录 VPS:
+   ssh root@vps1.example.com
+
+3. 确保有 wget:
+   apt-get install wget   # Debian/Ubuntu
+   yum install wget       # CentOS/RHEL
+
+4. 部署:
+   chmod +x agent-linux-amd64 deploy-agent.sh
+   mv agent-linux-amd64 agent
+   sudo ./deploy-agent.sh \
+     agent-001 \
+     "VPS-Tokyo-1" \
+     controller.example.com \
+     YOUR_AUTH_TOKEN
+
+5. 启动:
+   sudo systemctl enable bandwidth-agent
+   sudo systemctl start bandwidth-agent
+   sudo systemctl status bandwidth-agent
+
+═══════════════════════════════════════════════════════════════════════
+
+✅ 验证部署:
+
+Controller:
+   curl http://localhost:9090/metrics | jq
+   curl http://localhost:9090/agents | jq
+   sudo journalctl -u bandwidth-controller -f
+
+每个 Agent:
+   sudo systemctl status bandwidth-agent
+   sudo journalctl -u bandwidth-agent -f
+
+═══════════════════════════════════════════════════════════════════════
+
+📊 查看实时监控:
+
+Controller 会显示实时控制面板:
+
+═══════════════════════════════════════════════════════════════════
+          Google Bandwidth Controller Dashboard
+═══════════════════════════════════════════════════════════════════
+
+Target: 10.00 Gbps | Current: 9.85 Gbps (98.5%)
+Active Agents: 5/15
+Next Rotation: 14:32:15 (45s)
+
+Agent Bandwidth Breakdown:
+───────────────────────────────────────────────────────────────
+VPS-Tokyo-1          [████████████░░░░░░░░]    1250 Mbps
+VPS-Singapore-1      [██████████░░░░░░░░░░]    1050 Mbps
+...
+
+═══════════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════════════
+
+📚 完整文档:
+
+• GITHUB_SETUP.md  - GitHub 上传和构建详细说明
+• DEPLOYMENT.md    - 完整部署指南 (中文)
+• README.md        - 项目说明和 API 文档
+
+═══════════════════════════════════════════════════════════════════════
+
+🆘 常见问题:
+
+Q: Agent 无法连接?
+A: 1. 检查防火墙: sudo ufw allow 8080/tcp
+   2. 检查 auth_token 是否一致
+   3. 测试连接: telnet controller.example.com 8080
+
+Q: 带宽不够 10Gbps?
+A: 1. 确认所有 15 个 agents 已连接
+   2. 检查 VPS 的网络质量和带宽上限
+   3. 增加 max_concurrent 参数
+
+Q: 如何停止?
+A: sudo systemctl stop bandwidth-controller
+   sudo systemctl stop bandwidth-agent
+
+═══════════════════════════════════════════════════════════════════════
+
+💡 小贴士:
+
+• 修改 controller.yaml 后需要重启 controller
+• Agent 会自动重连,无需担心短暂断线
+• 可以随时添加/删除 agents
+• 建议先在 1-2 台 VPS 测试再全量部署
+• 使用 Release 版本而不是直接用 main 分支
+
+═══════════════════════════════════════════════════════════════════════
+
+🎯 项目目标:
+
+✓ 15 台 VPS 协同工作
+✓ 总带宽 10Gbps
+✓ 自然、非线性流量模式
+✓ 满足 Google PNI 要求
+
+祝你成功! 🚀
