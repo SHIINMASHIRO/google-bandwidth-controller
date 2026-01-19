@@ -1,0 +1,30 @@
+# Agent Identification
+agent:
+  id: "agent-001"              # Must match ID in controller config
+  name: "VPS-Tokyo-1"          # Descriptive name for this agent
+
+# Controller Connection
+controller:
+  host: "controller.example.com"  # Controller hostname or IP
+  port: 8080                       # Controller WebSocket port
+  auth_token: "CHANGE_THIS_SECRET_TOKEN"  # Must match controller token
+  reconnect_interval: 5s           # Time between reconnection attempts
+  max_reconnect_attempts: 0        # 0 = infinite retries
+
+# Download Settings
+download:
+  tool: "wget"                 # Currently only wget supported
+  output_dir: "/tmp/bandwidth-test"
+  cleanup: true                # Delete files after download
+  timeout: 300s                # Max duration for single download
+
+# Metrics Reporting
+metrics:
+  report_interval: 5s          # How often to send metrics to controller
+  bandwidth_sample_rate: 1s    # How often to sample bandwidth locally
+
+# Logging
+logging:
+  level: "info"                # debug, info, warn, error
+  format: "json"               # json or text
+  output: "/var/log/agent/agent.log"

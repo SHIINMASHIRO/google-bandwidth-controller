@@ -1,0 +1,28 @@
+[Unit]
+Description=Google Bandwidth Controller Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=controller
+Group=controller
+WorkingDirectory=/opt/bandwidth-controller
+ExecStart=/opt/bandwidth-controller/bin/controller -config /etc/bandwidth-controller/controller.yaml
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/controller /tmp
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

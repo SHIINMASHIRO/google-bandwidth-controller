@@ -1,0 +1,148 @@
+# Controller Server Settings
+server:
+  host: "0.0.0.0"
+  ws_port: 8080          # WebSocket port for agents
+  http_port: 9090        # HTTP API port for metrics/monitoring
+  auth_token: "CHANGE_THIS_SECRET_TOKEN"  # Authentication token (IMPORTANT: Change this!)
+
+# Bandwidth Target Settings
+bandwidth:
+  target_gbps: 10.0      # Target total bandwidth in Gbps (for Google PNI)
+  tolerance: 0.15        # ±15% acceptable variance
+
+# Scheduling Parameters
+scheduler:
+  # Concurrent servers configuration
+  min_concurrent: 2      # Minimum servers active at once
+  max_concurrent: 8      # Maximum servers active at once
+
+  # Rotation settings
+  rotation_interval_min: 30s   # Minimum time before schedule change
+  rotation_interval_max: 180s  # Maximum time before schedule change
+
+  # Bandwidth allocation per server
+  server_bandwidth_min: 400    # Minimum Mbps per server
+  server_bandwidth_max: 1200   # Maximum Mbps per server
+
+  # Wave patterns (gradual ramp up/down)
+  ramp_up_duration: 15s        # Time to gradually add servers
+  ramp_down_duration: 20s      # Time to gradually remove servers
+
+  # Randomness factors (0.0 - 1.0)
+  timing_randomness: 0.3       # Variation in scheduling timing
+  bandwidth_randomness: 0.25   # Variation in bandwidth allocation
+
+# Agent Pool Configuration (15 VPS servers)
+agents:
+  - id: "agent-001"
+    host: "vps1.example.com"
+    name: "VPS-Tokyo-1"
+    max_bandwidth: 1500        # Max Mbps this server can handle
+    region: "tokyo"
+
+  - id: "agent-002"
+    host: "vps2.example.com"
+    name: "VPS-Tokyo-2"
+    max_bandwidth: 1500
+    region: "tokyo"
+
+  - id: "agent-003"
+    host: "vps3.example.com"
+    name: "VPS-Singapore-1"
+    max_bandwidth: 1200
+    region: "singapore"
+
+  - id: "agent-004"
+    host: "vps4.example.com"
+    name: "VPS-Singapore-2"
+    max_bandwidth: 1200
+    region: "singapore"
+
+  - id: "agent-005"
+    host: "vps5.example.com"
+    name: "VPS-HongKong-1"
+    max_bandwidth: 1000
+    region: "hongkong"
+
+  - id: "agent-006"
+    host: "vps6.example.com"
+    name: "VPS-HongKong-2"
+    max_bandwidth: 1000
+    region: "hongkong"
+
+  - id: "agent-007"
+    host: "vps7.example.com"
+    name: "VPS-Seoul-1"
+    max_bandwidth: 1500
+    region: "seoul"
+
+  - id: "agent-008"
+    host: "vps8.example.com"
+    name: "VPS-Seoul-2"
+    max_bandwidth: 1500
+    region: "seoul"
+
+  - id: "agent-009"
+    host: "vps9.example.com"
+    name: "VPS-LA-1"
+    max_bandwidth: 1200
+    region: "los_angeles"
+
+  - id: "agent-010"
+    host: "vps10.example.com"
+    name: "VPS-LA-2"
+    max_bandwidth: 1200
+    region: "los_angeles"
+
+  - id: "agent-011"
+    host: "vps11.example.com"
+    name: "VPS-SanJose-1"
+    max_bandwidth: 1500
+    region: "san_jose"
+
+  - id: "agent-012"
+    host: "vps12.example.com"
+    name: "VPS-SanJose-2"
+    max_bandwidth: 1500
+    region: "san_jose"
+
+  - id: "agent-013"
+    host: "vps13.example.com"
+    name: "VPS-Seattle-1"
+    max_bandwidth: 1000
+    region: "seattle"
+
+  - id: "agent-014"
+    host: "vps14.example.com"
+    name: "VPS-Seattle-2"
+    max_bandwidth: 1000
+    region: "seattle"
+
+  - id: "agent-015"
+    host: "vps15.example.com"
+    name: "VPS-Taiwan-1"
+    max_bandwidth: 1200
+    region: "taiwan"
+
+# Download URLs (Google Services)
+# These should be large files hosted on Google infrastructure
+download_urls:
+  - "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+  - "https://dl.google.com/go/go1.21.6.linux-amd64.tar.gz"
+  - "https://dl.google.com/android/repository/platform-tools-latest-linux.zip"
+  - "https://dl.google.com/dl/android/studio/ide-zips/2023.1.1.28/android-studio-2023.1.1.28-linux.tar.gz"
+  - "https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl"
+  # Add more Google Cloud Storage or Google service URLs as needed
+  # You can use: gsutil ls gs://your-bucket to find more GCS URLs
+
+# Metrics Settings
+metrics:
+  collection_interval: 5s      # How often to collect from agents
+  retention_period: 24h        # How long to keep historical data
+  aggregation_window: 1m       # Window for rolling averages
+
+# Logging
+logging:
+  level: "info"                # debug, info, warn, error
+  format: "json"               # json or text
+  output: "/var/log/controller/controller.log"

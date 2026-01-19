@@ -1,0 +1,53 @@
+# Binaries
+controller
+agent
+controller-*
+agent-*
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+/tmp/
+
+# Configuration files with secrets (keep templates)
+configs/controller-production.yaml
+configs/agent-production.yaml
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+
+# Test coverage
+coverage.txt
+coverage.html

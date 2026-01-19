@@ -1,0 +1,71 @@
+name: Build Binaries
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ created ]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Build Controller
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        go build -v -o controller-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/controller
+
+    - name: Build Agent
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        go build -v -o agent-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/agent
+
+    - name: Create tarball
+      run: |
+        tar czf bandwidth-controller-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz \
+          controller-${{ matrix.goos }}-${{ matrix.goarch }} \
+          agent-${{ matrix.goos }}-${{ matrix.goarch }} \
+          configs/ \
+          scripts/ \
+          deployments/ \
+          README.md
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bandwidth-controller-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: bandwidth-controller-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+
+    - name: Upload binaries to release
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./bandwidth-controller-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+        asset_name: bandwidth-controller-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+        asset_content_type: application/gzip

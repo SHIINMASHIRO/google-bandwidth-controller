@@ -1,0 +1,24 @@
+[Unit]
+Description=Google Bandwidth Agent Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/bandwidth-agent
+ExecStart=/opt/bandwidth-agent/bin/agent -config /etc/bandwidth-agent/agent.yaml
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
