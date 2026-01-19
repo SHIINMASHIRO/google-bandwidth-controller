@@ -16,7 +16,8 @@
       "Bash(open \"https://github.com/SHIINMASHIRO/google-bandwidth-controller/releases/new?tag=v1.0.0\")",
       "Bash(curl:*)",
       "Bash(go mod tidy:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(open \"https://github.com/SHIINMASHIRO/google-bandwidth-controller/releases\")"
     ]
   }
 }
