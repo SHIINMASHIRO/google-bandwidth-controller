@@ -45,7 +45,7 @@ echo ""
 
 # 配置
 GITHUB_REPO="SHIINMASHIRO/google-bandwidth-controller"
-VERSION="v1.0.1"
+VERSION="v1.0.3"
 INSTALL_DIR="/opt/bandwidth-agent"
 CONFIG_DIR="/etc/bandwidth-agent"
 LOG_DIR="/var/log/agent"
