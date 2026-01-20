@@ -42,8 +42,7 @@ type Job struct {
 
 // NewExecutor creates a new command executor
 func NewExecutor(config *Config, metrics *MetricsCollector, log *logger.Logger) *Executor {
-	// Ensure output directory exists
-	os.MkdirAll(config.Download.OutputDir, 0755)
+	// No need to create output directory when using /dev/null
 
 	return &Executor{
 		config:  config,
@@ -166,9 +165,8 @@ func (e *Executor) runDownload(ctx context.Context, cmd *protocol.DownloadComman
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, duration)
 	defer timeoutCancel()
 
-	// Generate unique output filename
-	outputFilename := fmt.Sprintf("%s_%s.tmp", cmd.CommandID, uuid.New().String()[:8])
-	outputPath := filepath.Join(e.config.Download.OutputDir, outputFilename)
+	// Use /dev/null to avoid writing to disk
+	outputPath := "/dev/null"
 
 	// Build wget command
 	// wget --limit-rate=<bandwidth>M -O <output> -c --tries=0 --timeout=10 <url>
@@ -240,16 +238,7 @@ func (e *Executor) runDownload(ctx context.Context, cmd *protocol.DownloadComman
 	// Wait for monitor to finish
 	close(monitorDone)
 
-	// Cleanup downloaded file if configured
-	if e.config.Download.Cleanup {
-		if err := os.Remove(outputPath); err != nil && !os.IsNotExist(err) {
-			e.logger.Warnw("Failed to cleanup file",
-				"command_id", cmd.CommandID,
-				"path", outputPath,
-				"error", err,
-			)
-		}
-	}
+	// No cleanup needed when using /dev/null
 
 	e.logger.Infow("Download command completed",
 		"command_id", cmd.CommandID,

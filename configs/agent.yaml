@@ -14,8 +14,8 @@ controller:
 # Download Settings
 download:
   tool: "wget"                 # Currently only wget supported
-  output_dir: "/tmp/bandwidth-test"
-  cleanup: true                # Delete files after download
+  output_dir: "/dev"           # Use /dev to avoid disk writes
+  cleanup: false               # No need to cleanup /dev/null
   timeout: 300s                # Max duration for single download
 
 # Metrics Reporting
