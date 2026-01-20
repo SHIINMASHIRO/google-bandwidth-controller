@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mashiro/google-bandwidth-controller/internal/dashboard"
 	"github.com/mashiro/google-bandwidth-controller/pkg/logger"
 )
 
@@ -35,13 +36,22 @@ func NewAPIServer(config *Config, server *Server, scheduler *Scheduler, metrics 
 func (a *APIServer) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 
-	// Register routes
+	// Register API routes
 	mux.HandleFunc("/metrics", a.handleMetrics)
 	mux.HandleFunc("/status", a.handleStatus)
 	mux.HandleFunc("/agents", a.handleAgents)
 	mux.HandleFunc("/history", a.handleHistory)
 	mux.HandleFunc("/stats", a.handleStats)
 	mux.HandleFunc("/health", a.handleHealth)
+
+	// Register dashboard routes
+	dashboardHandler, err := dashboard.NewHandler()
+	if err != nil {
+		a.logger.Warnw("Failed to create dashboard handler", "error", err)
+	} else {
+		dashboardHandler.RegisterRoutes(mux)
+		a.logger.Info("Web dashboard enabled at /")
+	}
 
 	addr := fmt.Sprintf("%s:%d", a.config.Server.Host, a.config.Server.HTTPPort)
 	httpServer := &http.Server{

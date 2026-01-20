@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Bandwidth Controller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-active { background-color: #22c55e; }
+        .status-idle { background-color: #6b7280; }
+        .status-disconnected { background-color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-6 max-w-6xl">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-xl font-bold text-white">Google Bandwidth Controller</h1>
+            <div class="flex items-center gap-4 text-sm">
+                <span id="connection-status" class="flex items-center gap-2">
+                    <span class="status-dot status-idle"></span>
+                    <span class="text-gray-400">Connecting...</span>
+                </span>
+                <span id="last-update" class="text-gray-500"></span>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            <!-- Status Card -->
+            <div class="bg-gray-800 rounded-lg p-5">
+                <h2 class="text-sm font-medium text-gray-400 mb-4">Current Status</h2>
+                <div id="bandwidth-gauge" class="mb-5">
+                    <div class="text-center">
+                        <div class="text-4xl font-bold text-blue-400">--</div>
+                        <div class="text-gray-500 text-sm">of -- Gbps</div>
+                        <div class="mt-3 bg-gray-700 rounded-full h-3 overflow-hidden">
+                            <div id="bandwidth-bar" class="h-full bg-blue-500 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div id="bandwidth-percent" class="text-xs text-gray-500 mt-1">0%</div>
+                    </div>
+                </div>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Phase</span>
+                        <span id="phase" class="font-medium text-gray-300">--</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Next Rotation</span>
+                        <span id="next-rotation" class="font-medium text-gray-300">--</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Active Agents</span>
+                        <span id="active-agents" class="font-medium text-gray-300">--</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Rotations</span>
+                        <span id="rotation-count" class="font-medium text-gray-300">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="bg-gray-800 rounded-lg p-5 lg:col-span-2">
+                <h2 class="text-sm font-medium text-gray-400 mb-4">Bandwidth History</h2>
+                <div style="height: 200px;">
+                    <canvas id="bandwidth-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agents Table -->
+        <div class="bg-gray-800 rounded-lg p-5">
+            <h2 class="text-sm font-medium text-gray-400 mb-4">Agent Bandwidth</h2>
+            <div id="agents-list" class="space-y-2">
+                <div class="text-gray-500 text-sm">Loading agents...</div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-6 text-center text-gray-600 text-xs">
+            <span>API: <span id="api-host">--</span></span>
+            <span class="mx-2">|</span>
+            <span>v1.0.0</span>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

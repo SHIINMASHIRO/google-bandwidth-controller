@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	configPath = flag.String("config", "configs/controller.yaml", "Path to configuration file")
-	version    = flag.Bool("version", false, "Print version and exit")
-	dashboard  = flag.Bool("dashboard", true, "Show real-time dashboard")
+	configPath       = flag.String("config", "configs/controller.yaml", "Path to configuration file")
+	version          = flag.Bool("version", false, "Print version and exit")
+	consoleDashboard = flag.Bool("console", false, "Show console dashboard (deprecated, use web dashboard instead)")
 )
 
 const controllerVersion = "1.0.0"
@@ -95,10 +95,14 @@ func main() {
 		}
 	}()
 
-	// Start dashboard if enabled
-	if *dashboard {
+	// Start console dashboard if enabled (deprecated)
+	if *consoleDashboard {
 		go runDashboard(ctx, apiServer)
 	}
+
+	log.Infow("Web dashboard available",
+		"url", fmt.Sprintf("http://%s:%d/", config.Server.Host, config.Server.HTTPPort),
+	)
 
 	// Wait for error or context cancellation
 	select {
