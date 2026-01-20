@@ -139,10 +139,27 @@ download_urls:
 # Use long videos to maximize bandwidth utilization
 # These URLs will be downloaded using yt-dlp for more realistic traffic
 youtube_urls:
-  # Google official channels - long form content
-  - "https://www.youtube.com/watch?v=cNfINi5CNbY"  # Google I/O keynote
-  - "https://www.youtube.com/watch?v=nP-nMZpLM1A"  # Android Dev Summit
-  - "https://www.youtube.com/watch?v=F8Gs9Tb7U7c"  # Google Cloud Next
+  # Armadas Japan channel - 8K/4K videos
+  - "https://www.youtube.com/watch?v=nq3VGnWzYg8"
+  - "https://www.youtube.com/watch?v=gevGvoIGYig"
+  - "https://www.youtube.com/watch?v=mzd6RXVQnUs"
+  - "https://www.youtube.com/watch?v=e3zGHPMnm2M"
+  - "https://www.youtube.com/watch?v=awm37315S20"
+  - "https://www.youtube.com/watch?v=np2Qt2Ra_Mc"
+  - "https://www.youtube.com/watch?v=mwpSC_LoZy8"
+  - "https://www.youtube.com/watch?v=8UGHtEvX2TA"
+  - "https://www.youtube.com/watch?v=cwcppSL6ASA"
+  - "https://www.youtube.com/watch?v=KXfG49RxmK4"
+  - "https://www.youtube.com/watch?v=TIcHq-EWhmo"
+  - "https://www.youtube.com/watch?v=IPgjYi12_us"
+  - "https://www.youtube.com/watch?v=X6JE20SmeEk"
+  - "https://www.youtube.com/watch?v=M1RmxLOsLdE"
+  - "https://www.youtube.com/watch?v=x_N8obCPOok"
+  - "https://www.youtube.com/watch?v=8e1t7mNO5lg"
+  - "https://www.youtube.com/watch?v=1qE1l4kvNM0"
+  - "https://www.youtube.com/watch?v=dlKwwfQ1naE"
+  - "https://www.youtube.com/watch?v=UcjlHMz4tu4"
+  - "https://www.youtube.com/watch?v=c-Nma6wll7Q"
   # Add more YouTube video URLs as needed
   # For playlists, use: https://www.youtube.com/playlist?list=PLAYLIST_ID
 
