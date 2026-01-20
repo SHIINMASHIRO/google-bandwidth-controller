@@ -119,11 +119,110 @@ func (s *Scheduler) evaluateAndAdjust() {
 	if time.Now().After(s.state.NextRotation) {
 		s.logger.Info("Rotation time reached, performing rotation")
 		go s.performRotation()
+		return
 	}
 
 	// Update current bandwidth from metrics
 	agg := s.metrics.GetAggregated()
 	s.state.CurrentTotalBW = agg.TotalBandwidth
+
+	// Adaptive bandwidth adjustment: check if agents need more tasks
+	s.adjustBandwidthIfNeeded(agg)
+}
+
+// adjustBandwidthIfNeeded sends additional download tasks if agents are underperforming
+func (s *Scheduler) adjustBandwidthIfNeeded(agg AggregatedMetrics) {
+	// Only adjust during stable phase
+	if s.state.Phase != "stable" {
+		return
+	}
+
+	// Check each active agent
+	for agentID, alloc := range s.state.ActiveAgents {
+		// Get current bandwidth for this agent
+		agentBW, exists := agg.AgentBreakdown[agentID]
+		if !exists {
+			continue
+		}
+
+		targetBW := float64(alloc.AllocatedBW)
+		tolerance := s.config.Bandwidth.Tolerance // e.g., 0.15 = 15%
+
+		// Calculate how much bandwidth is missing
+		minAcceptable := targetBW * (1 - tolerance)
+
+		if agentBW < minAcceptable {
+			// Agent is underperforming, calculate deficit
+			deficit := targetBW - agentBW
+			deficitPercent := (deficit / targetBW) * 100
+
+			// Only log and adjust if deficit is significant (> 20%)
+			if deficitPercent > 20 {
+				s.logger.Infow("Agent bandwidth deficit detected",
+					"agent_id", agentID,
+					"target", targetBW,
+					"current", agentBW,
+					"deficit", deficit,
+					"deficit_percent", deficitPercent,
+				)
+
+				// Send additional download task to boost bandwidth
+				go s.boostAgentBandwidth(agentID, int64(deficit))
+			}
+		}
+	}
+}
+
+// boostAgentBandwidth sends an additional download task to increase bandwidth
+func (s *Scheduler) boostAgentBandwidth(agentID string, additionalBW int64) {
+	// Minimum boost is 100 Mbps
+	if additionalBW < 100 {
+		additionalBW = 100
+	}
+
+	// Cap at 500 Mbps per boost to avoid overwhelming
+	if additionalBW > 500 {
+		additionalBW = 500
+	}
+
+	url := s.selectRandomURL()
+	commandID := uuid.New().String()
+
+	// Duration: until next rotation
+	s.mu.RLock()
+	duration := time.Until(s.state.NextRotation)
+	if duration < 30*time.Second {
+		s.mu.RUnlock()
+		return // Too close to rotation, skip
+	}
+	s.mu.RUnlock()
+
+	cmd := protocol.DownloadCommand{
+		CommandID: commandID,
+		URL:       url,
+		Duration:  duration.String(),
+		Bandwidth: additionalBW,
+	}
+
+	msg, err := protocol.NewMessage(protocol.MsgTypeDownloadCommand, agentID, cmd)
+	if err != nil {
+		s.logger.Errorw("Failed to create boost command", "error", err)
+		return
+	}
+
+	if err := s.server.SendToAgent(agentID, msg); err != nil {
+		s.logger.Errorw("Failed to send boost command to agent",
+			"agent_id", agentID,
+			"error", err,
+		)
+		return
+	}
+
+	s.logger.Infow("Sent bandwidth boost to agent",
+		"agent_id", agentID,
+		"additional_bandwidth", additionalBW,
+		"url", url,
+	)
 }
 
 // performRotation performs a full scheduling rotation

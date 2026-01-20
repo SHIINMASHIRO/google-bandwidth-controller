@@ -1,13 +1,9 @@
 package agent
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"os/exec"
-	"regexp"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -15,6 +11,11 @@ import (
 
 	"github.com/mashiro/google-bandwidth-controller/internal/protocol"
 	"github.com/mashiro/google-bandwidth-controller/pkg/logger"
+)
+
+const (
+	// Number of concurrent download threads
+	DefaultConcurrentDownloads = 4
 )
 
 // Executor handles download command execution
@@ -25,22 +26,28 @@ type Executor struct {
 	metrics    *MetricsCollector
 }
 
-// Job represents a running download job
+// Job represents a running download job with multiple threads
 type Job struct {
-	CommandID       string
-	URL             string
-	Cmd             *exec.Cmd
-	StartTime       time.Time
-	BytesDownloaded atomic.Int64
+	CommandID        string
+	URL              string
+	StartTime        time.Time
+	BytesDownloaded  atomic.Int64
 	CurrentSpeedMbps atomic.Value // float64
-	Cancel          context.CancelFunc
-	mu              sync.Mutex
+	Cancel           context.CancelFunc
+	wg               sync.WaitGroup
+	threads          []*downloadThread
+	mu               sync.Mutex
+}
+
+// downloadThread represents a single download thread
+type downloadThread struct {
+	id     int
+	cmd    *exec.Cmd
+	cancel context.CancelFunc
 }
 
 // NewExecutor creates a new command executor
 func NewExecutor(config *Config, metrics *MetricsCollector, log *logger.Logger) *Executor {
-	// No need to create output directory when using /dev/null
-
 	return &Executor{
 		config:  config,
 		logger:  log,
@@ -48,7 +55,7 @@ func NewExecutor(config *Config, metrics *MetricsCollector, log *logger.Logger) 
 	}
 }
 
-// ExecuteDownload starts a download command
+// ExecuteDownload starts a download command with multiple threads
 func (e *Executor) ExecuteDownload(cmd *protocol.DownloadCommand) error {
 	// Check if command already exists
 	if _, exists := e.activeJobs.Load(cmd.CommandID); exists {
@@ -62,18 +69,22 @@ func (e *Executor) ExecuteDownload(cmd *protocol.DownloadCommand) error {
 		URL:       cmd.URL,
 		StartTime: time.Now(),
 		Cancel:    cancel,
+		threads:   make([]*downloadThread, 0, DefaultConcurrentDownloads),
 	}
 	job.CurrentSpeedMbps.Store(0.0)
 
 	e.activeJobs.Store(cmd.CommandID, job)
-	e.logger.Infow("Starting download command",
+	e.logger.Infow("Starting multi-threaded download",
 		"command_id", cmd.CommandID,
 		"url", cmd.URL,
 		"bandwidth", cmd.Bandwidth,
-		"duration", cmd.Duration,
+		"threads", DefaultConcurrentDownloads,
 	)
 
-	go e.runDownload(ctx, cmd, job)
+	// Register job with metrics collector
+	e.metrics.RegisterJob(cmd.CommandID, job)
+
+	go e.runMultiThreadDownload(ctx, cmd, job)
 
 	return nil
 }
@@ -84,7 +95,7 @@ func (e *Executor) Stop(commandID string) error {
 		// Stop all commands
 		e.activeJobs.Range(func(key, value interface{}) bool {
 			job := value.(*Job)
-			job.Cancel()
+			e.stopJob(job)
 			return true
 		})
 		e.logger.Info("Stopping all download commands")
@@ -94,12 +105,25 @@ func (e *Executor) Stop(commandID string) error {
 	// Stop specific command
 	if jobVal, exists := e.activeJobs.Load(commandID); exists {
 		job := jobVal.(*Job)
-		job.Cancel()
+		e.stopJob(job)
 		e.logger.Infow("Stopping download command", "command_id", commandID)
 		return nil
 	}
 
 	return fmt.Errorf("command %s not found", commandID)
+}
+
+// stopJob stops all threads in a job
+func (e *Executor) stopJob(job *Job) {
+	job.Cancel()
+
+	job.mu.Lock()
+	for _, thread := range job.threads {
+		if thread.cmd != nil && thread.cmd.Process != nil {
+			thread.cmd.Process.Signal(syscall.SIGTERM)
+		}
+	}
+	job.mu.Unlock()
 }
 
 // GetActiveJobs returns the number of active jobs
@@ -125,7 +149,7 @@ func (e *Executor) GetJobMetrics() []protocol.CommandMetrics {
 			URL:             job.URL,
 			BytesDownloaded: job.BytesDownloaded.Load(),
 			CurrentSpeed:    speed,
-			Progress:        0, // wget doesn't provide accurate progress
+			Progress:        0,
 		})
 		return true
 	})
@@ -133,17 +157,10 @@ func (e *Executor) GetJobMetrics() []protocol.CommandMetrics {
 	return metrics
 }
 
-// runDownload executes the actual download using wget
-func (e *Executor) runDownload(ctx context.Context, cmd *protocol.DownloadCommand, job *Job) {
+// runMultiThreadDownload runs multiple download threads in parallel
+func (e *Executor) runMultiThreadDownload(ctx context.Context, cmd *protocol.DownloadCommand, job *Job) {
 	defer e.activeJobs.Delete(cmd.CommandID)
 	defer e.metrics.DeregisterJob(cmd.CommandID)
-
-	// Parse duration
-	duration, err := time.ParseDuration(cmd.Duration)
-	if err != nil {
-		e.logger.Errorw("Invalid duration", "command_id", cmd.CommandID, "error", err)
-		return
-	}
 
 	// Handle start delay if specified
 	if cmd.StartDelay != "" {
@@ -158,145 +175,122 @@ func (e *Executor) runDownload(ctx context.Context, cmd *protocol.DownloadComman
 		}
 	}
 
-	// Create timeout context
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, duration)
-	defer timeoutCancel()
+	// Calculate bandwidth per thread
+	bandwidthPerThread := cmd.Bandwidth / DefaultConcurrentDownloads
+	if bandwidthPerThread < 1 {
+		bandwidthPerThread = 1
+	}
 
-	// Use /dev/null to avoid writing to disk
-	outputPath := "/dev/null"
-
-	// Build wget command
-	// wget --limit-rate=<bandwidth>M -O <output> -c --tries=0 --timeout=10 <url>
-	limitRate := fmt.Sprintf("%dM", cmd.Bandwidth)
-
-	wgetCmd := exec.CommandContext(timeoutCtx, "wget",
-		"--limit-rate", limitRate,
-		"-O", outputPath,
-		"-c", // Continue partial downloads
-		"--progress=dot:mega",
-		"--tries", "0", // Infinite retries
-		"--timeout", "30", // Connection timeout
-		"--no-check-certificate", // Skip SSL verification for some GCS buckets
-		cmd.URL,
+	e.logger.Infow("Starting download threads",
+		"command_id", cmd.CommandID,
+		"total_bandwidth", cmd.Bandwidth,
+		"bandwidth_per_thread", bandwidthPerThread,
+		"threads", DefaultConcurrentDownloads,
 	)
 
-	// Capture stderr for progress monitoring
-	stderr, err := wgetCmd.StderrPipe()
-	if err != nil {
-		e.logger.Errorw("Failed to create stderr pipe", "command_id", cmd.CommandID, "error", err)
-		return
+	// Start download threads
+	for i := 0; i < DefaultConcurrentDownloads; i++ {
+		job.wg.Add(1)
+		go e.downloadThread(ctx, cmd, job, i, bandwidthPerThread)
 	}
 
-	job.Cmd = wgetCmd
+	// Wait for all threads to complete (they will run until cancelled)
+	job.wg.Wait()
 
-	// Register job with metrics collector
-	e.metrics.RegisterJob(cmd.CommandID, job)
-
-	// Start command
-	if err := wgetCmd.Start(); err != nil {
-		e.logger.Errorw("Failed to start wget", "command_id", cmd.CommandID, "error", err)
-		return
-	}
-
-	// Monitor progress in separate goroutine
-	monitorDone := make(chan struct{})
-	go e.monitorProgress(stderr, job, monitorDone)
-
-	// Wait for completion or timeout
-	waitErr := make(chan error, 1)
-	go func() {
-		waitErr <- wgetCmd.Wait()
-	}()
-
-	select {
-	case <-timeoutCtx.Done():
-		// Timeout reached, gracefully terminate
-		e.logger.Infow("Download duration reached, stopping",
-			"command_id", cmd.CommandID,
-			"duration", duration,
-		)
-		if wgetCmd.Process != nil {
-			wgetCmd.Process.Signal(syscall.SIGTERM)
-			// Give it 5 seconds to terminate gracefully
-			time.Sleep(5 * time.Second)
-			if wgetCmd.ProcessState == nil || !wgetCmd.ProcessState.Exited() {
-				wgetCmd.Process.Kill()
-			}
-		}
-	case err := <-waitErr:
-		if err != nil && timeoutCtx.Err() == nil {
-			e.logger.Warnw("Download command exited with error",
-				"command_id", cmd.CommandID,
-				"error", err,
-			)
-		}
-	}
-
-	// Wait for monitor to finish
-	close(monitorDone)
-
-	// No cleanup needed when using /dev/null
-
-	e.logger.Infow("Download command completed",
+	e.logger.Infow("All download threads stopped",
 		"command_id", cmd.CommandID,
-		"bytes_downloaded", job.BytesDownloaded.Load(),
 		"duration", time.Since(job.StartTime),
 	)
 }
 
-// monitorProgress parses wget output to extract bandwidth metrics
-func (e *Executor) monitorProgress(reader io.Reader, job *Job, done chan struct{}) {
-	scanner := bufio.NewScanner(reader)
+// downloadThread runs a single download thread that loops continuously
+func (e *Executor) downloadThread(ctx context.Context, cmd *protocol.DownloadCommand, job *Job, threadID int, bandwidthMbps int64) {
+	defer job.wg.Done()
 
-	// Parse wget progress output
-	// Example: "2024-01-19 10:30:15 (850 MB/s) - ..."
-	// Also: "     0K .......... .......... ..........  0%  850M 1s"
-	speedRegex := regexp.MustCompile(`\(([0-9.]+)\s*([KMG]?)B/s\)`)
-	progressRegex := regexp.MustCompile(`([0-9.]+)\s*([KMG]?)B/s`)
+	limitRate := fmt.Sprintf("%dM", bandwidthMbps)
 
-	for scanner.Scan() {
+	for {
 		select {
-		case <-done:
+		case <-ctx.Done():
+			e.logger.Infow("Download thread stopping",
+				"command_id", cmd.CommandID,
+				"thread_id", threadID,
+			)
 			return
 		default:
 		}
 
-		line := scanner.Text()
+		// Create a new wget command for this iteration
+		threadCtx, threadCancel := context.WithCancel(ctx)
 
-		// Try to extract speed from either format
-		var speed float64
-		var unit string
+		wgetCmd := exec.CommandContext(threadCtx, "wget",
+			"--limit-rate", limitRate,
+			"-O", "/dev/null",
+			"--progress=dot:mega",
+			"--tries", "3",
+			"--timeout", "30",
+			"--no-check-certificate",
+			cmd.URL,
+		)
 
-		matches := speedRegex.FindStringSubmatch(line)
-		if len(matches) >= 3 {
-			speed, _ = strconv.ParseFloat(matches[1], 64)
-			unit = matches[2]
-		} else {
-			matches = progressRegex.FindStringSubmatch(line)
-			if len(matches) >= 3 {
-				speed, _ = strconv.ParseFloat(matches[1], 64)
-				unit = matches[2]
+		// Register thread
+		thread := &downloadThread{
+			id:     threadID,
+			cmd:    wgetCmd,
+			cancel: threadCancel,
+		}
+
+		job.mu.Lock()
+		job.threads = append(job.threads, thread)
+		job.mu.Unlock()
+
+		// Start wget
+		if err := wgetCmd.Start(); err != nil {
+			e.logger.Warnw("Failed to start wget thread",
+				"command_id", cmd.CommandID,
+				"thread_id", threadID,
+				"error", err,
+			)
+			threadCancel()
+			// Brief pause before retry
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+				continue
 			}
 		}
 
-		if speed > 0 {
-			// Convert to Mbps
-			mbps := convertToMbps(speed, unit)
-			job.CurrentSpeedMbps.Store(mbps)
-		}
-	}
-}
+		// Wait for wget to complete
+		err := wgetCmd.Wait()
+		threadCancel()
 
-// convertToMbps converts speed to Mbps
-func convertToMbps(speed float64, unit string) float64 {
-	switch unit {
-	case "K":
-		return speed * 8 / 1000 // KB/s to Mbps
-	case "M":
-		return speed * 8 // MB/s to Mbps
-	case "G":
-		return speed * 8 * 1000 // GB/s to Mbps
-	default:
-		return speed * 8 / 1000000 // B/s to Mbps
+		// Check if we should stop
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Log completion and restart
+		if err != nil {
+			e.logger.Debugw("Download iteration completed with error, restarting",
+				"command_id", cmd.CommandID,
+				"thread_id", threadID,
+				"error", err,
+			)
+		} else {
+			e.logger.Debugw("Download iteration completed, restarting",
+				"command_id", cmd.CommandID,
+				"thread_id", threadID,
+			)
+		}
+
+		// Small delay before restarting to avoid hammering
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 }

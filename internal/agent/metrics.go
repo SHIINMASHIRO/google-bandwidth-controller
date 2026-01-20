@@ -21,6 +21,7 @@ type MetricsCollector struct {
 	mu                 sync.RWMutex
 	bandwidthSamples   []float64
 	maxSamples         int
+	netMonitor         *NetworkMonitor
 }
 
 // NewMetricsCollector creates a new metrics collector
@@ -29,6 +30,7 @@ func NewMetricsCollector(config *Config, log *logger.Logger) *MetricsCollector {
 		logger:     log,
 		config:     config,
 		maxSamples: 60, // Keep 60 samples (1 minute at 1 sample/sec)
+		netMonitor: NewNetworkMonitor(log),
 	}
 	mc.currentBandwidth.Store(0.0)
 	mc.averageBandwidth.Store(0.0)
@@ -53,12 +55,18 @@ func (m *MetricsCollector) Start(ctx context.Context) {
 		sampleInterval = 1 * time.Second
 	}
 
+	// Start network monitor
+	if err := m.netMonitor.Start(sampleInterval); err != nil {
+		m.logger.Warnw("Failed to start network monitor, falling back to wget parsing", "error", err)
+	}
+
 	ticker := time.NewTicker(sampleInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			m.netMonitor.Stop()
 			return
 		case <-ticker.C:
 			m.collectSample()
@@ -68,18 +76,9 @@ func (m *MetricsCollector) Start(ctx context.Context) {
 
 // collectSample collects bandwidth metrics from all active jobs
 func (m *MetricsCollector) collectSample() {
-	totalBW := 0.0
-	totalBytes := int64(0)
-
-	m.jobs.Range(func(key, value interface{}) bool {
-		job := value.(*Job)
-		speed := job.CurrentSpeedMbps.Load().(float64)
-		bytes := job.BytesDownloaded.Load()
-
-		totalBW += speed
-		totalBytes += bytes
-		return true
-	})
+	// Use network interface stats as primary source
+	totalBW := m.netMonitor.GetCurrentBandwidth()
+	totalBytes := int64(m.netMonitor.GetTotalBytesDownloaded())
 
 	// Store current bandwidth
 	m.currentBandwidth.Store(totalBW)
@@ -153,4 +152,10 @@ func (m *MetricsCollector) Reset() {
 	m.mu.Lock()
 	m.bandwidthSamples = make([]float64, 0, m.maxSamples)
 	m.mu.Unlock()
+	m.netMonitor.ResetBaseline()
+}
+
+// GetNetworkMonitor returns the network monitor instance
+func (m *MetricsCollector) GetNetworkMonitor() *NetworkMonitor {
+	return m.netMonitor
 }
