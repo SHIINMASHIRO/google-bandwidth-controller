@@ -5,9 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"sync"
@@ -15,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mashiro/google-bandwidth-controller/internal/protocol"
 	"github.com/mashiro/google-bandwidth-controller/pkg/logger"
 )
