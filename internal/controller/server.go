@@ -246,6 +246,7 @@ func (s *Server) handleRegister(client *Client, payload *protocol.RegisterPayloa
 		"agent_id", payload.AgentID,
 		"agent_name", payload.Name,
 		"version", payload.Version,
+		"capabilities", payload.Capabilities,
 	)
 
 	// Notify scheduler
@@ -315,6 +316,21 @@ func (s *Server) GetClient(agentID string) (*Client, bool) {
 		return nil, false
 	}
 	return clientVal.(*Client), true
+}
+
+// CheckAgentCapability checks if an agent has a specific capability
+func (s *Server) CheckAgentCapability(agentID string, capability string) bool {
+	clientVal, ok := s.clients.Load(agentID)
+	if !ok {
+		return false
+	}
+
+	client := clientVal.(*Client)
+	if client.Info == nil || client.Info.Capabilities == nil {
+		return false
+	}
+
+	return client.Info.Capabilities[capability]
 }
 
 // healthCheckClients periodically checks client health

@@ -37,6 +37,7 @@ type Job struct {
 	wg               sync.WaitGroup
 	threads          []*downloadThread
 	mu               sync.Mutex
+	DownloadType     protocol.DownloadType
 }
 
 // downloadThread represents a single download thread
@@ -64,27 +65,45 @@ func (e *Executor) ExecuteDownload(cmd *protocol.DownloadCommand) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Determine download type (default to wget for backward compatibility)
+	downloadType := cmd.Type
+	if downloadType == "" {
+		downloadType = protocol.DownloadTypeWget
+	}
+
 	job := &Job{
-		CommandID: cmd.CommandID,
-		URL:       cmd.URL,
-		StartTime: time.Now(),
-		Cancel:    cancel,
-		threads:   make([]*downloadThread, 0, DefaultConcurrentDownloads),
+		CommandID:    cmd.CommandID,
+		URL:          cmd.URL,
+		StartTime:    time.Now(),
+		Cancel:       cancel,
+		threads:      make([]*downloadThread, 0, DefaultConcurrentDownloads),
+		DownloadType: downloadType,
 	}
 	job.CurrentSpeedMbps.Store(0.0)
 
 	e.activeJobs.Store(cmd.CommandID, job)
-	e.logger.Infow("Starting multi-threaded download",
-		"command_id", cmd.CommandID,
-		"url", cmd.URL,
-		"bandwidth", cmd.Bandwidth,
-		"threads", DefaultConcurrentDownloads,
-	)
 
 	// Register job with metrics collector
 	e.metrics.RegisterJob(cmd.CommandID, job)
 
-	go e.runMultiThreadDownload(ctx, cmd, job)
+	// Choose execution method based on download type
+	switch downloadType {
+	case protocol.DownloadTypeYtDlp:
+		e.logger.Infow("Starting yt-dlp download",
+			"command_id", cmd.CommandID,
+			"url", cmd.URL,
+			"bandwidth", cmd.Bandwidth,
+		)
+		go e.runYtDlpDownload(ctx, cmd, job)
+	default:
+		e.logger.Infow("Starting multi-threaded wget download",
+			"command_id", cmd.CommandID,
+			"url", cmd.URL,
+			"bandwidth", cmd.Bandwidth,
+			"threads", DefaultConcurrentDownloads,
+		)
+		go e.runMultiThreadDownload(ctx, cmd, job)
+	}
 
 	return nil
 }
@@ -291,6 +310,136 @@ func (e *Executor) downloadThread(ctx context.Context, cmd *protocol.DownloadCom
 		case <-ctx.Done():
 			return
 		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+// runYtDlpDownload runs a yt-dlp download task for YouTube videos
+func (e *Executor) runYtDlpDownload(ctx context.Context, cmd *protocol.DownloadCommand, job *Job) {
+	defer e.activeJobs.Delete(cmd.CommandID)
+	defer e.metrics.DeregisterJob(cmd.CommandID)
+
+	// Handle start delay if specified
+	if cmd.StartDelay != "" {
+		delay, err := time.ParseDuration(cmd.StartDelay)
+		if err == nil && delay > 0 {
+			e.logger.Infow("Delaying yt-dlp start", "command_id", cmd.CommandID, "delay", delay)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	// Calculate limit rate for yt-dlp
+	// yt-dlp uses bytes/s with K/M suffix, we convert Mbps to MB/s (approximate)
+	// Mbps / 8 = MB/s, but yt-dlp M suffix means MiB, so we use a factor
+	limitRate := fmt.Sprintf("%dM", cmd.Bandwidth/8)
+	if cmd.Bandwidth < 8 {
+		limitRate = fmt.Sprintf("%dK", cmd.Bandwidth*125) // Mbps * 125 = KB/s
+	}
+
+	e.logger.Infow("Starting yt-dlp download loop",
+		"command_id", cmd.CommandID,
+		"url", cmd.URL,
+		"bandwidth_mbps", cmd.Bandwidth,
+		"limit_rate", limitRate,
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			e.logger.Infow("yt-dlp download stopping", "command_id", cmd.CommandID)
+			return
+		default:
+		}
+
+		// Create a new yt-dlp command for this iteration
+		threadCtx, threadCancel := context.WithCancel(ctx)
+
+		ytdlpCmd := exec.CommandContext(threadCtx, "yt-dlp",
+			// Output to /dev/null - don't save the file
+			"-o", "/dev/null",
+			// Limit download speed
+			"--limit-rate", limitRate,
+			// Don't check certificate (consistent with wget)
+			"--no-check-certificate",
+			// Don't download entire playlist, only the specified video
+			"--no-playlist",
+			// Select best quality to maximize bandwidth usage
+			"-f", "bestvideo+bestaudio/best",
+			// Quiet mode, reduce output
+			"--quiet",
+			"--no-warnings",
+			// Don't save any metadata
+			"--no-write-info-json",
+			"--no-write-thumbnail",
+			"--no-write-description",
+			"--no-write-comments",
+			// Retry settings
+			"--retries", "3",
+			"--fragment-retries", "3",
+			// Socket timeout
+			"--socket-timeout", "30",
+			// The URL to download
+			cmd.URL,
+		)
+
+		// Register thread
+		thread := &downloadThread{
+			id:     0,
+			cmd:    ytdlpCmd,
+			cancel: threadCancel,
+		}
+
+		job.mu.Lock()
+		job.threads = append(job.threads, thread)
+		job.mu.Unlock()
+
+		// Start yt-dlp
+		if err := ytdlpCmd.Start(); err != nil {
+			e.logger.Warnw("Failed to start yt-dlp",
+				"command_id", cmd.CommandID,
+				"error", err,
+			)
+			threadCancel()
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second): // Longer retry interval for yt-dlp
+				continue
+			}
+		}
+
+		// Wait for yt-dlp to complete
+		err := ytdlpCmd.Wait()
+		threadCancel()
+
+		// Check if we should stop
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Log completion and restart
+		if err != nil {
+			e.logger.Debugw("yt-dlp download completed with error, restarting",
+				"command_id", cmd.CommandID,
+				"error", err,
+			)
+		} else {
+			e.logger.Debugw("yt-dlp download completed successfully, restarting",
+				"command_id", cmd.CommandID,
+			)
+		}
+
+		// Small delay before restarting
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(500 * time.Millisecond): // Slightly longer delay for yt-dlp
 		}
 	}
 }

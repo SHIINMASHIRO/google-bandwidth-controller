@@ -23,6 +23,14 @@ const (
 	MsgTypeError          MessageType = "error"
 )
 
+// DownloadType defines the type of download tool to use
+type DownloadType string
+
+const (
+	DownloadTypeWget  DownloadType = "wget"
+	DownloadTypeYtDlp DownloadType = "yt-dlp"
+)
+
 // Message is the base structure for all WebSocket messages
 type Message struct {
 	Type      MessageType     `json:"type"`
@@ -55,11 +63,12 @@ func (m *Message) UnmarshalPayload(v interface{}) error {
 
 // DownloadCommand instructs an agent to start downloading from a URL
 type DownloadCommand struct {
-	CommandID  string `json:"command_id"`
-	URL        string `json:"url"`
-	Duration   string `json:"duration"`    // e.g., "5m", "300s"
-	Bandwidth  int64  `json:"bandwidth"`   // Mbps
-	StartDelay string `json:"start_delay"` // Optional delay before starting
+	CommandID  string       `json:"command_id"`
+	URL        string       `json:"url"`
+	Duration   string       `json:"duration"`        // e.g., "5m", "300s"
+	Bandwidth  int64        `json:"bandwidth"`       // Mbps
+	StartDelay string       `json:"start_delay"`     // Optional delay before starting
+	Type       DownloadType `json:"type,omitempty"`  // wget or yt-dlp (defaults to wget if empty)
 }
 
 // StopCommand instructs an agent to stop downloading

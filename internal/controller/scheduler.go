@@ -185,7 +185,8 @@ func (s *Scheduler) boostAgentBandwidth(agentID string, additionalBW int64) {
 		additionalBW = 500
 	}
 
-	url := s.selectRandomURL()
+	// Select URL with type based on agent capabilities
+	selection := s.selectURL(agentID)
 	commandID := uuid.New().String()
 
 	// Duration: until next rotation
@@ -199,9 +200,10 @@ func (s *Scheduler) boostAgentBandwidth(agentID string, additionalBW int64) {
 
 	cmd := protocol.DownloadCommand{
 		CommandID: commandID,
-		URL:       url,
+		URL:       selection.URL,
 		Duration:  duration.String(),
 		Bandwidth: additionalBW,
+		Type:      selection.Type,
 	}
 
 	msg, err := protocol.NewMessage(protocol.MsgTypeDownloadCommand, agentID, cmd)
@@ -221,7 +223,8 @@ func (s *Scheduler) boostAgentBandwidth(agentID string, additionalBW int64) {
 	s.logger.Infow("Sent bandwidth boost to agent",
 		"agent_id", agentID,
 		"additional_bandwidth", additionalBW,
-		"url", url,
+		"url", selection.URL,
+		"type", selection.Type,
 	)
 }
 
@@ -456,8 +459,8 @@ func (s *Scheduler) rampUpAgents(allocations []*AgentAllocation) {
 
 // startAgent sends download command to an agent
 func (s *Scheduler) startAgent(alloc *AgentAllocation) {
-	// Select random URL
-	url := s.selectRandomURL()
+	// Select URL with type based on agent capabilities and configuration
+	selection := s.selectURL(alloc.AgentID)
 
 	// Duration: until next rotation + buffer
 	s.mu.RLock()
@@ -468,9 +471,10 @@ func (s *Scheduler) startAgent(alloc *AgentAllocation) {
 
 	cmd := protocol.DownloadCommand{
 		CommandID: commandID,
-		URL:       url,
+		URL:       selection.URL,
 		Duration:  duration.String(),
 		Bandwidth: alloc.AllocatedBW,
+		Type:      selection.Type,
 	}
 
 	msg, err := protocol.NewMessage(protocol.MsgTypeDownloadCommand, alloc.AgentID, cmd)
@@ -489,7 +493,7 @@ func (s *Scheduler) startAgent(alloc *AgentAllocation) {
 
 	// Update allocation
 	alloc.CurrentCommand = commandID
-	alloc.URL = url
+	alloc.URL = selection.URL
 	alloc.PlannedDuration = duration
 
 	// Update agent status
@@ -502,7 +506,8 @@ func (s *Scheduler) startAgent(alloc *AgentAllocation) {
 		"agent_id", alloc.AgentID,
 		"bandwidth", alloc.AllocatedBW,
 		"duration", duration.Round(time.Second),
-		"url", url,
+		"url", selection.URL,
+		"type", selection.Type,
 	)
 }
 
@@ -539,13 +544,45 @@ func (s *Scheduler) stopAllAgents() {
 	}
 }
 
-// selectRandomURL selects a random download URL
+// URLSelection contains the selected URL and its download type
+type URLSelection struct {
+	URL  string
+	Type protocol.DownloadType
+}
+
+// selectRandomURL selects a random download URL (wget only, for backward compatibility)
 func (s *Scheduler) selectRandomURL() string {
 	if len(s.config.URLs) == 0 {
 		return "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
 	}
 
 	return s.config.URLs[rand.Intn(len(s.config.URLs))]
+}
+
+// selectURL selects a URL based on configured proportions and agent capabilities
+func (s *Scheduler) selectURL(agentID string) URLSelection {
+	// Check if agent supports yt-dlp
+	ytdlpCapable := s.server.CheckAgentCapability(agentID, "yt-dlp")
+
+	// If agent supports yt-dlp and we have YouTube URLs configured
+	if ytdlpCapable && len(s.config.YouTubeURLs) > 0 && s.config.URLMix.YtDlpPercent > 0 {
+		// Roll to decide download type based on configured percentages
+		roll := rand.Intn(100)
+		if roll < s.config.URLMix.YtDlpPercent {
+			// Select a random YouTube URL for yt-dlp
+			url := s.config.YouTubeURLs[rand.Intn(len(s.config.YouTubeURLs))]
+			return URLSelection{
+				URL:  url,
+				Type: protocol.DownloadTypeYtDlp,
+			}
+		}
+	}
+
+	// Default: use wget with standard download URLs
+	return URLSelection{
+		URL:  s.selectRandomURL(),
+		Type: protocol.DownloadTypeWget,
+	}
 }
 
 // scheduleNextRotation schedules the next rotation

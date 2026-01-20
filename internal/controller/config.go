@@ -10,13 +10,15 @@ import (
 
 // Config represents controller configuration
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Bandwidth BandwidthConfig `yaml:"bandwidth"`
-	Scheduler SchedulerConfig `yaml:"scheduler"`
-	Agents    []AgentConfig   `yaml:"agents"`
-	URLs      []string        `yaml:"download_urls"`
-	Metrics   MetricsConfig   `yaml:"metrics"`
-	Logging   LoggingConfig   `yaml:"logging"`
+	Server      ServerConfig    `yaml:"server"`
+	Bandwidth   BandwidthConfig `yaml:"bandwidth"`
+	Scheduler   SchedulerConfig `yaml:"scheduler"`
+	Agents      []AgentConfig   `yaml:"agents"`
+	URLs        []string        `yaml:"download_urls"`
+	YouTubeURLs []string        `yaml:"youtube_urls"`
+	URLMix      URLMixConfig    `yaml:"url_mix"`
+	Metrics     MetricsConfig   `yaml:"metrics"`
+	Logging     LoggingConfig   `yaml:"logging"`
 }
 
 // ServerConfig contains server settings
@@ -68,6 +70,12 @@ type LoggingConfig struct {
 	Level  string `yaml:"level"`
 	Format string `yaml:"format"`
 	Output string `yaml:"output"`
+}
+
+// URLMixConfig defines the proportion of different download types
+type URLMixConfig struct {
+	WgetPercent  int `yaml:"wget_percent"`  // Percentage of wget tasks (0-100)
+	YtDlpPercent int `yaml:"ytdlp_percent"` // Percentage of yt-dlp tasks (0-100)
 }
 
 // LoadConfig loads configuration from a YAML file
@@ -142,6 +150,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if config.Logging.Format == "" {
 		config.Logging.Format = "json"
+	}
+
+	// Set defaults for URL mix (50/50 by default)
+	if config.URLMix.WgetPercent == 0 && config.URLMix.YtDlpPercent == 0 {
+		config.URLMix.WgetPercent = 50
+		config.URLMix.YtDlpPercent = 50
 	}
 
 	return &config, nil

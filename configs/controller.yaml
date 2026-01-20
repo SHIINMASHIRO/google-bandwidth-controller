@@ -124,7 +124,7 @@ agents:
     max_bandwidth: 1200
     region: "taiwan"
 
-# Download URLs (Google Services)
+# Download URLs (Google Services - wget)
 # These should be large files hosted on Google infrastructure
 download_urls:
   - "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
@@ -134,6 +134,23 @@ download_urls:
   - "https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl"
   # Add more Google Cloud Storage or Google service URLs as needed
   # You can use: gsutil ls gs://your-bucket to find more GCS URLs
+
+# YouTube URLs (yt-dlp)
+# Use long videos to maximize bandwidth utilization
+# These URLs will be downloaded using yt-dlp for more realistic traffic
+youtube_urls:
+  # Google official channels - long form content
+  - "https://www.youtube.com/watch?v=cNfINi5CNbY"  # Google I/O keynote
+  - "https://www.youtube.com/watch?v=nP-nMZpLM1A"  # Android Dev Summit
+  - "https://www.youtube.com/watch?v=F8Gs9Tb7U7c"  # Google Cloud Next
+  # Add more YouTube video URLs as needed
+  # For playlists, use: https://www.youtube.com/playlist?list=PLAYLIST_ID
+
+# URL Mix Configuration
+# Defines the proportion of different download types
+url_mix:
+  wget_percent: 50    # 50% of tasks use wget (Google direct downloads)
+  ytdlp_percent: 50   # 50% of tasks use yt-dlp (YouTube videos)
 
 # Metrics Settings
 metrics:

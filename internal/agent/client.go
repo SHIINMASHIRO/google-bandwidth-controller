@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -310,10 +311,16 @@ func (c *Client) sendRegistration() error {
 		Name:    c.config.Agent.Name,
 		Version: agentVersion,
 		Capabilities: map[string]bool{
-			"wget": true,
+			"wget":   true,
+			"yt-dlp": c.checkYtDlpAvailability(),
 		},
 		MaxBandwidth: 0, // Will be configured on controller side
 	}
+
+	c.logger.Infow("Registering agent with capabilities",
+		"agent_id", c.config.Agent.ID,
+		"capabilities", payload.Capabilities,
+	)
 
 	msg, err := protocol.NewMessage(protocol.MsgTypeRegister, c.config.Agent.ID, payload)
 	if err != nil {
@@ -321,6 +328,17 @@ func (c *Client) sendRegistration() error {
 	}
 
 	return c.conn.WriteJSON(msg)
+}
+
+// checkYtDlpAvailability checks if yt-dlp is installed and available
+func (c *Client) checkYtDlpAvailability() bool {
+	_, err := exec.LookPath("yt-dlp")
+	if err != nil {
+		c.logger.Info("yt-dlp not found, YouTube downloads will be disabled")
+		return false
+	}
+	c.logger.Info("yt-dlp detected, YouTube downloads enabled")
+	return true
 }
 
 // reportMetrics periodically sends metrics to controller
