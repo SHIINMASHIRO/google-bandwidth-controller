@@ -1,6 +1,6 @@
 # Binaries
-controller
-agent
+/controller
+/agent
 controller-*
 agent-*
 *.exe

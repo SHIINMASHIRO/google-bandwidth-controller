@@ -367,8 +367,8 @@ func (e *Executor) runYtDlpDownload(ctx context.Context, cmd *protocol.DownloadC
 			"--no-check-certificate",
 			// Don't download entire playlist, only the specified video
 			"--no-playlist",
-			// Select best quality to maximize bandwidth usage
-			"-f", "bestvideo+bestaudio/best",
+			// Select best video only (no audio, no merge needed)
+			"-f", "bestvideo",
 			// Quiet mode, reduce output
 			"--quiet",
 			"--no-warnings",
