@@ -158,11 +158,11 @@ class Dashboard {
         const container = document.getElementById('agents-list');
         const agents = agentsData.agents || [];
 
-        // Sort: downloading first, then by bandwidth desc
+        // Sort by agent name numerically (VPS-HK-1, VPS-HK-2, ... VPS-HK-10, VPS-HK-11)
         agents.sort((a, b) => {
-            if (a.current_bandwidth > 0 && b.current_bandwidth === 0) return -1;
-            if (a.current_bandwidth === 0 && b.current_bandwidth > 0) return 1;
-            return b.current_bandwidth - a.current_bandwidth;
+            const numA = parseInt(a.name.match(/\d+$/)?.[0] || '0');
+            const numB = parseInt(b.name.match(/\d+$/)?.[0] || '0');
+            return numA - numB;
         });
 
         if (agents.length === 0) {
