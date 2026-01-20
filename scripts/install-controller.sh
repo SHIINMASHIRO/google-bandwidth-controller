@@ -17,7 +17,7 @@ fi
 
 # 配置
 GITHUB_REPO="SHIINMASHIRO/google-bandwidth-controller"
-VERSION="v1.0.3"
+VERSION="v1.1.0"
 INSTALL_DIR="/opt/bandwidth-controller"
 CONFIG_DIR="/etc/bandwidth-controller"
 LOG_DIR="/var/log/controller"
