@@ -51,3 +51,6 @@ build/
 # Test coverage
 coverage.txt
 coverage.html
+
+# Test environment
+ssh.conf

@@ -127,11 +127,7 @@ agents:
 # Download URLs (Google Services - wget)
 # These should be large files hosted on Google infrastructure
 download_urls:
-  - "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
-  - "https://dl.google.com/go/go1.21.6.linux-amd64.tar.gz"
-  - "https://dl.google.com/android/repository/platform-tools-latest-linux.zip"
-  - "https://dl.google.com/dl/android/studio/ide-zips/2023.1.1.28/android-studio-2023.1.1.28-linux.tar.gz"
-  - "https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl"
+  - "https://redirector.gvt1.com/edgedl/android/studio/install/2025.2.2.8/android-studio-2025.2.2.8-mac_arm.dmg"
   # Add more Google Cloud Storage or Google service URLs as needed
   # You can use: gsutil ls gs://your-bucket to find more GCS URLs
 
