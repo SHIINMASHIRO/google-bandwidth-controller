@@ -314,7 +314,7 @@ func (e *Executor) downloadThread(ctx context.Context, cmd *protocol.DownloadCom
 	}
 }
 
-// runYtDlpDownload runs a yt-dlp download task for YouTube videos
+// runYtDlpDownload runs a yt-dlp download task for YouTube videos using multiple threads
 func (e *Executor) runYtDlpDownload(ctx context.Context, cmd *protocol.DownloadCommand, job *Job) {
 	defer e.activeJobs.Delete(cmd.CommandID)
 	defer e.metrics.DeregisterJob(cmd.CommandID)
@@ -332,25 +332,54 @@ func (e *Executor) runYtDlpDownload(ctx context.Context, cmd *protocol.DownloadC
 		}
 	}
 
+	// Calculate bandwidth per thread (use same threading as wget)
+	bandwidthPerThread := cmd.Bandwidth / DefaultConcurrentDownloads
+	if bandwidthPerThread < 1 {
+		bandwidthPerThread = 1
+	}
+
+	e.logger.Infow("Starting yt-dlp download threads",
+		"command_id", cmd.CommandID,
+		"url", cmd.URL,
+		"total_bandwidth", cmd.Bandwidth,
+		"bandwidth_per_thread", bandwidthPerThread,
+		"threads", DefaultConcurrentDownloads,
+	)
+
+	// Start multiple yt-dlp threads
+	for i := 0; i < DefaultConcurrentDownloads; i++ {
+		job.wg.Add(1)
+		go e.ytdlpThread(ctx, cmd, job, i, bandwidthPerThread)
+	}
+
+	// Wait for all threads to complete
+	job.wg.Wait()
+
+	e.logger.Infow("All yt-dlp threads stopped",
+		"command_id", cmd.CommandID,
+		"duration", time.Since(job.StartTime),
+	)
+}
+
+// ytdlpThread runs a single yt-dlp download thread that loops continuously
+func (e *Executor) ytdlpThread(ctx context.Context, cmd *protocol.DownloadCommand, job *Job, threadID int, bandwidthMbps int64) {
+	defer job.wg.Done()
+
 	// Calculate limit rate for yt-dlp
 	// yt-dlp uses bytes/s with K/M suffix, we convert Mbps to MB/s (approximate)
 	// Mbps / 8 = MB/s, but yt-dlp M suffix means MiB, so we use a factor
-	limitRate := fmt.Sprintf("%dM", cmd.Bandwidth/8)
-	if cmd.Bandwidth < 8 {
-		limitRate = fmt.Sprintf("%dK", cmd.Bandwidth*125) // Mbps * 125 = KB/s
+	limitRate := fmt.Sprintf("%dM", bandwidthMbps/8)
+	if bandwidthMbps < 8 {
+		limitRate = fmt.Sprintf("%dK", bandwidthMbps*125) // Mbps * 125 = KB/s
 	}
-
-	e.logger.Infow("Starting yt-dlp download loop",
-		"command_id", cmd.CommandID,
-		"url", cmd.URL,
-		"bandwidth_mbps", cmd.Bandwidth,
-		"limit_rate", limitRate,
-	)
 
 	for {
 		select {
 		case <-ctx.Done():
-			e.logger.Infow("yt-dlp download stopping", "command_id", cmd.CommandID)
+			e.logger.Infow("yt-dlp thread stopping",
+				"command_id", cmd.CommandID,
+				"thread_id", threadID,
+			)
 			return
 		default:
 		}
@@ -388,7 +417,7 @@ func (e *Executor) runYtDlpDownload(ctx context.Context, cmd *protocol.DownloadC
 
 		// Register thread
 		thread := &downloadThread{
-			id:     0,
+			id:     threadID,
 			cmd:    ytdlpCmd,
 			cancel: threadCancel,
 		}
@@ -399,15 +428,16 @@ func (e *Executor) runYtDlpDownload(ctx context.Context, cmd *protocol.DownloadC
 
 		// Start yt-dlp
 		if err := ytdlpCmd.Start(); err != nil {
-			e.logger.Warnw("Failed to start yt-dlp",
+			e.logger.Warnw("Failed to start yt-dlp thread",
 				"command_id", cmd.CommandID,
+				"thread_id", threadID,
 				"error", err,
 			)
 			threadCancel()
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(5 * time.Second): // Longer retry interval for yt-dlp
+			case <-time.After(5 * time.Second):
 				continue
 			}
 		}
@@ -425,13 +455,15 @@ func (e *Executor) runYtDlpDownload(ctx context.Context, cmd *protocol.DownloadC
 
 		// Log completion and restart
 		if err != nil {
-			e.logger.Debugw("yt-dlp download completed with error, restarting",
+			e.logger.Debugw("yt-dlp thread completed with error, restarting",
 				"command_id", cmd.CommandID,
+				"thread_id", threadID,
 				"error", err,
 			)
 		} else {
-			e.logger.Debugw("yt-dlp download completed successfully, restarting",
+			e.logger.Debugw("yt-dlp thread completed successfully, restarting",
 				"command_id", cmd.CommandID,
+				"thread_id", threadID,
 			)
 		}
 
@@ -439,7 +471,7 @@ func (e *Executor) runYtDlpDownload(ctx context.Context, cmd *protocol.DownloadC
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(500 * time.Millisecond): // Slightly longer delay for yt-dlp
+		case <-time.After(500 * time.Millisecond):
 		}
 	}
 }
